@@ -36,13 +36,18 @@ endif()
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(CAIRO cairo REQUIRED)
+pkg_check_modules(GLM glm REQUIRED)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}
                     ${CMAKE_BINARY_DIR}
+                    ${GLM_INCLUDE_DIRS}
                     ${CAIRO_INCLUDE_DIRS})
 
 # Add sources
 file(GLOB SOURCES "*.cpp")
+
+# add C++11
+add_definitions(-std=c++11)
 
 # Set executable
 add_executable(sme ${SOURCES})
