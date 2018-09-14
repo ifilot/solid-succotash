@@ -25,6 +25,7 @@
 #include <string>
 #include <glm/glm.hpp>
 #include <glm/gtx/norm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <cairo/cairo.h>
 
 // assume that all celestial bodies are in the same plane
@@ -33,18 +34,22 @@
 static const double G = 6.673E-11;
 
 // starting positions (aphelion) in m
-static const std::vector<glm::dvec2> r0 = {
-glm::dvec2(0.0, 0.0),                           // sun
-glm::dvec2(149597870700 * 1.02, 0.0),           // earth
-glm::dvec2(149597870700 * 1.02 + 405400000, 0.0)     // moon
+std::vector<glm::dvec3> r0 = {
+glm::dvec3(0.0, 0.0, 0.0),                                // sun
+glm::dvec3(149597870700 * 1.02, 0.0, 0.0),                // earth
+glm::dvec3(0.0, 0.0, 0.0)                                 // moon
 };
 
+static const double moonrx = 405400000;
+
 // initial velocities in m/s
-static const std::vector<glm::dvec2> v0 = {
-glm::dvec2(0.0, 0.0),                     // sun
-glm::dvec2(0.0, 29300.0),                 // earth
-glm::dvec2(0.0, 29300.0 + 970.0)          // moon
+std::vector<glm::dvec3> v0 = {
+glm::dvec3(0.0, 0.0, 0.0),                     // sun
+glm::dvec3(0.0, 29300.0, 0.0),                 // earth
+glm::dvec3(0.0, 0.0, 0.0)                      // moon
 };
+
+static const double moonvy = 970.0;
 
 // masses
 static const std::vector<double> m =  {
@@ -60,12 +65,12 @@ static const std::vector<double> m =  {
  * @param[in]  r     position
  * @param[in]  m     masses
  */
-void calculate_acc(std::vector<glm::dvec2>& a,
-                   const std::vector<glm::dvec2>& r,
+void calculate_acc(std::vector<glm::dvec3>& a,
+                   const std::vector<glm::dvec3>& r,
                    const std::vector<double>& m) {
 
     for(unsigned int i=0; i<a.size(); i++) {
-        glm::dvec2 acc(0.0, 0.0);
+        glm::dvec3 acc(0.0, 0.0, 0.0);
 
         for(unsigned int j=0; j<a.size(); j++) {
             if(i == j) {    // ignore self-interaction
@@ -88,8 +93,8 @@ void calculate_acc(std::vector<glm::dvec2>& a,
  * @param[in]  m     masses
  */
 void calculate_kin(std::vector<double>& ekin,
-                   const std::vector<glm::dvec2>& v,
-                   const std::vector<glm::dvec2>& vprev,
+                   const std::vector<glm::dvec3>& v,
+                   const std::vector<glm::dvec3>& vprev,
                    const std::vector<double>& m) {
 
     for(unsigned int i=0; i<v.size(); i++) {
@@ -103,7 +108,7 @@ void calculate_kin(std::vector<double>& ekin,
  * @param[in]  pos       vector with position data
  * @param[in]  filename  filename
  */
-void output_cairo_graph(const std::vector<glm::dvec2>& pos,
+void output_cairo_graph(const std::vector<glm::dvec3>& pos,
                         const std::string& filename) {
     static const double canvas_size = 1000;
 
@@ -168,12 +173,15 @@ void output_cairo_graph(const std::vector<glm::dvec2>& pos,
  * @param[in]  filename  filename
  */
 void output_to_datafile(const std::vector<double>& t,
-                        const std::vector<glm::dvec2>& r,
+                        const std::vector<glm::dvec3>& r,
                         const std::string& filename) {
     std::ofstream out(filename);
 
     for(unsigned int i=0; i<t.size(); i++) {
-        out << t[i] << "\t" << r[i].x << "\t" << r[i].y << std::endl;
+        out << t[i] << "\t"
+            << r[i].x << "\t"
+            << r[i].y << "\t"
+            << r[i].z << std::endl;
     }
 
     out.close();
@@ -184,8 +192,16 @@ static const double tstep = 3600.0;
 
 int main() {
 
+    // since the lunar orbit is out-of-plane with respect to the
+    // terrestrial orbit, we have to apply a rotation
+    glm::dmat4 rot = glm::rotate(glm::dmat4(1.0), glm::two_pi<double>() * 5.0 / 360.0, glm::dvec3(0.0, 1.0, 0.0));
+    glm::dvec4 r_moon = rot * glm::dvec4(moonrx, 0.0, 0.0, 1.0);
+    r0[2] = r0[1] + glm::dvec3(r_moon);
+    v0[2] = v0[1] + glm::dvec3(0.0, moonvy, 0.0);
+
+
     // initialize working variables
-    std::vector<glm::dvec2> a(m.size());
+    std::vector<glm::dvec3> a(m.size());
     auto r = r0;
     auto v = v0;
     auto vprev = v;
@@ -194,9 +210,9 @@ int main() {
 
     // construct vectors to store data
     std::vector<double> data_t;
-    std::vector<glm::dvec2> data_r_earth;
-    std::vector<glm::dvec2> data_r_moon;
-    std::vector<glm::dvec2> data_v;
+    std::vector<glm::dvec3> data_r_earth;
+    std::vector<glm::dvec3> data_r_moon;
+    std::vector<glm::dvec3> data_v;
     std::vector<double> data_kin;
 
     // loop over span of 10 years
