@@ -34,11 +34,21 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(CAIRO cairo REQUIRED)
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}
+                    ${CMAKE_BINARY_DIR}
+                    ${CAIRO_INCLUDE_DIRS})
+
 # Add sources
 file(GLOB SOURCES "*.cpp")
 
 # Set executable
 add_executable(sme ${SOURCES})
+
+# link libraries
+target_link_libraries(sme cairo)
 
 ###
 # Installing

@@ -19,10 +19,13 @@
  *                                                                        *
  **************************************************************************/
 
+#include <fstream>
 #include <iostream>
 #include <vector>
+#include <string>
 #include <glm/glm.hpp>
 #include <glm/gtx/norm.hpp>
+#include <cairo/cairo.h>
 
 // assume that all celestial bodies are in the same plane
 
@@ -94,8 +97,90 @@ void calculate_kin(std::vector<double>& ekin,
     }
 }
 
+/**
+ * @brief      create graph from simulation data
+ *
+ * @param[in]  pos       vector with position data
+ * @param[in]  filename  filename
+ */
+void output_cairo_graph(const std::vector<glm::dvec2>& pos,
+                        const std::string& filename) {
+    static const double canvas_size = 1000;
+
+    // create canvas
+    cairo_surface_t *surface;
+    cairo_t *cr;
+    surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, (unsigned int)canvas_size, (unsigned int)canvas_size);
+    cr = cairo_create (surface);
+
+    // set background to white
+    cairo_set_source_rgb (cr, 1.0, 1.0, 1.0);
+    cairo_paint(cr);
+
+    // print circle in the center for reference
+    cairo_set_source_rgb (cr, 0.0, 0.0, 0.0);
+    cairo_move_to(cr, canvas_size / 2.0, canvas_size / 2.0);
+    cairo_arc(cr, canvas_size / 2.0, canvas_size / 2.0, 10.0, 0, 2.0*M_PI);
+    cairo_fill(cr);
+
+    // establish maximum and minimum values
+    double xmin = 0.0;
+    double xmax = 0.0;
+    double ymin = 0.0;
+    double ymax = 0.0;
+    for(unsigned int i=0; i<pos.size(); i++) {
+        xmin = std::min(xmin, pos[i].x);
+        xmax = std::max(xmax, pos[i].x);
+
+        ymin = std::min(ymin, pos[i].y);
+        ymax = std::max(ymax, pos[i].y);
+    }
+    const double range = std::max(xmax - xmin, ymax - ymin) * 1.1;
+
+    // print data points as pixels on canvas
+    const double r = 0.5f;                      // two pixel radius
+
+    for(unsigned int i=0; i<pos.size(); i++) {
+        double x = canvas_size / 2.0 + (pos[i].x / range) * canvas_size;
+        double y = canvas_size / 2.0 + (pos[i].y / range) * canvas_size;
+
+        // set color for the data points based on the index in the
+        // vector range
+        double col = 1.0 - (double)i / (double)pos.size();
+        cairo_set_source_rgb (cr, 0.0, 0.0, col);   // draw in black
+
+        cairo_move_to(cr, x, y);
+        cairo_arc(cr, x, y, r, 0, 2.0*M_PI);
+        cairo_fill(cr);
+    }
+
+    // Clean-up and create picture file
+    cairo_destroy (cr);
+    cairo_surface_write_to_png (surface, filename.c_str());
+    cairo_surface_destroy (surface);
+}
+
+/**
+ * @brief      output data to data file
+ *
+ * @param[in]  t         vector of time steps
+ * @param[in]  r         vector of positions (or velocities)
+ * @param[in]  filename  filename
+ */
+void output_to_datafile(const std::vector<double>& t,
+                        const std::vector<glm::dvec2>& r,
+                        const std::string& filename) {
+    std::ofstream out(filename);
+
+    for(unsigned int i=0; i<t.size(); i++) {
+        out << t[i] << "\t" << r[i].x << "\t" << r[i].y << std::endl;
+    }
+
+    out.close();
+}
+
 // step size in seconds
-static const double tstep = 360.0;
+static const double tstep = 3600.0;
 
 int main() {
 
@@ -109,7 +194,8 @@ int main() {
 
     // construct vectors to store data
     std::vector<double> data_t;
-    std::vector<glm::dvec2> data_r;
+    std::vector<glm::dvec2> data_r_earth;
+    std::vector<glm::dvec2> data_r_moon;
     std::vector<glm::dvec2> data_v;
     std::vector<double> data_kin;
 
@@ -136,13 +222,17 @@ int main() {
         // collect data of interest; change indices here
         // to grab what you need!
         data_t.push_back(t);
-        data_r.push_back(r[2] - r[1]);
+        data_r_earth.push_back(r[1]);
+        data_r_moon.push_back(r[2] - r[1]);
         data_v.push_back(v[1]);
         data_kin.push_back(ekin[2]);
     }
 
-    // output data (this is of course not the best way, but it works)
-    for(unsigned int i=0; i<data_t.size(); i++) {
-        std::cout << data_t[i] << "\t" << data_r[i].x << std::endl;
-    }
+    // output to data files (can be opened in Origin or so)
+    output_to_datafile(data_t, data_r_earth, "earth.dat");
+    output_to_datafile(data_t, data_r_moon, "moon.dat");
+
+    // output to graphs
+    output_cairo_graph(data_r_earth, "earth.png");
+    output_cairo_graph(data_r_moon, "moon.png");
 }
